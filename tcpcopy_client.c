@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -62,6 +63,10 @@ int main(int argc, char* argv[]) {
     exit(EXIT_FAILURE);
   }
 
+  struct stat attr;
+  off_t filesize;
+  size_t filenamelength;
+
   // for each file
   for (int i = 2; i < argc; i++) {
     filename = argv[i];
@@ -71,8 +76,18 @@ int main(int argc, char* argv[]) {
       close_socket_errmsg(sockfd);
       exit(EXIT_FAILURE);
     }
-    // send file name
-    snprintf(buffer, sizeof(buffer), "%s\n", filename);
+
+    // get file status
+    if (fstat(filefd, &attr) == -1) {
+      fprintf(stderr, "cannot get file attributes for file \"%s\": %s\n", filename, strerror(errno));
+      close_errmsg(filename, filefd);
+      continue;
+    }
+    filesize = attr.st_size;
+    filenamelength = strlen(filename);
+
+    // send meta information
+    snprintf(buffer, sizeof(buffer), "%zu %s %ld\n", filenamelength, filename, filesize);
     if (sendall(sockfd, buffer, strlen(buffer)) <= 0) {
       fprintf(stderr, "failed to send file name\n");
       close_socket_errmsg(sockfd);
@@ -87,7 +102,6 @@ int main(int argc, char* argv[]) {
       }
     }
     close_errmsg(filename, filefd);
-    break; // only send one file!
   }
 }
 
@@ -117,58 +131,4 @@ ssize_t sendall(int sockfd, const char* buffer, size_t length) {
   return length;
 } 
 
-
-//   int fd;
-//   char* filename;
-//   char buffer[BUFFERSIZE];
-//   ssize_t nread;
-
-//   for (int i = 2; i < argc; i++) {
-//     filename = argv[i];
-//     fd = open(filename, O_RDONLY);
-//     if (fd == -1) {
-//       fprintf(stderr, "cannot open file \"%s\"\n", filename);
-//       continue;
-//     }
-//     snprintf(buffer, sizeof(buffer), "%s\n", filename);
-//     if (sendall(sockfd, buffer, strlen(buffer)) == -1) {
-//       fprintf(stderr, "failed to send filename \"%s\" to server\n", filename);
-//       close_print_error(filename, fd);
-//       continue;
-//     }
-//     while ((nread = read(fd, buffer, sizeof(buffer))) > 0) {
-//       if (sendall(sockfd, buffer, nread) == -1)
-//         fprintf(stderr, "failed to send some data to the server (filename = %s)\n", filename);
-//     }
-//     if (nread == -1)
-//       fprintf(stderr, "failed to read some data from file \"%s\"\n", filename);
-
-//     close_print_error(filename, fd);
-//   }
-
-//   if (close(sockfd) == -1)
-//     fprintf(stderr, "failed to close socket\n");
-
-//   exit(EXIT_SUCCESS);
-// }
-
-// int sendall(int sockfd, const char* buffer, size_t length) {
-//   ssize_t nsend;
-//   size_t  nleft = length;
-
-//   while (nleft > 0) {
-//     nsend = send(sockfd, buffer, nleft, 0);
-//     if (nsend == -1)
-//       return -1;
-
-//     nleft  -= nsend;
-//     buffer += nsend;
-//   }
-
-//   return 0;
-// }
-
-// void close_print_error(const char* fn, int fd) {
-//   if (close(fd) == -1)
-//     fprintf(stderr, "failed to close file \"%s\" (file descriptor = %d)\n", fn, fd);
-// }
+// protocol: n filename m\n
