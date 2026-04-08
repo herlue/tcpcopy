@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "cannot resolve hostname \"%s\"\n", argv[1]);
       exit(EXIT_FAILURE);
     }
-    servaddr.s_addr = inet_addr(hostinfo->h_addr_list[0]);
+    memcpy(&servaddr, hostinfo->h_addr_list[0], hostinfo->h_length);
   }
   int sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd == -1) {
@@ -50,7 +50,9 @@ int main(int argc, char* argv[]) {
 
   int     filefd;
   char    buffer[BUFFERSIZE];
+  char*   path;
   char*   filename;
+  char*   temp;
   ssize_t nread;
 
   int nfiles = argc - 2;
@@ -64,30 +66,35 @@ int main(int argc, char* argv[]) {
   }
 
   struct stat attr;
-  off_t filesize;
-  size_t filenamelength;
+  off_t       filesize;
+  size_t      fnlength;
 
   // for each file
   for (int i = 2; i < argc; i++) {
-    filename = argv[i];
-    filefd = open(filename, O_RDONLY);
+    path = argv[i];
+    filefd = open(path, O_RDONLY);
     if (filefd == -1) {
-      fprintf(stderr, "cannot open file \"%s\": %s\n", filename, strerror(errno));
+      fprintf(stderr, "cannot open file \"%s\": %s\n", path, strerror(errno));
       close_socket_errmsg(sockfd);
       exit(EXIT_FAILURE);
     }
 
     // get file status
     if (fstat(filefd, &attr) == -1) {
-      fprintf(stderr, "cannot get file attributes for file \"%s\": %s\n", filename, strerror(errno));
-      close_errmsg(filename, filefd);
+      fprintf(stderr, "cannot get file attributes for file \"%s\": %s\n", path, strerror(errno));
+      close_errmsg(path, filefd);
       continue;
     }
+
+    filename = path;
+    if (temp = strrchr(path, '/') && *(++temp))
+      filename = temp;
+
     filesize = attr.st_size;
-    filenamelength = strlen(filename);
+    fnlength = strlen(filename);
 
     // send meta information
-    snprintf(buffer, sizeof(buffer), "%zu %s %ld\n", filenamelength, filename, filesize);
+    snprintf(buffer, sizeof(buffer), "%zu %s %ld\n", fnlength, filename, filesize);
     if (sendall(sockfd, buffer, strlen(buffer)) <= 0) {
       fprintf(stderr, "failed to send file name\n");
       close_socket_errmsg(sockfd);

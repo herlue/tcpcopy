@@ -39,6 +39,10 @@ int main(void) {
   addr.sin_addr.s_addr = INADDR_ANY;
   socklen_t addrlen = sizeof(addr);
 
+  const int optval = 1;
+  if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)))
+    perror("setsockopt()"); 
+
   if (bind(serverfd, (struct sockaddr*) &addr, addrlen)) {
     fprintf(stderr, "cannot bind socket: %s\n", strerror(errno));
     close_errmsg(serverfd);
@@ -51,14 +55,10 @@ int main(void) {
     exit(EXIT_FAILURE);
   }
 
-  const int optval = 1;
-  if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)))
-    perror("setsockopt()");
-
-  int clientfd, filefd, nfiles;
-  char buffer[BUFFERSIZE];
-  ssize_t nread;
-  mode_t mode = 0664;
+  int         clientfd, filefd, nfiles;
+  char        buffer[BUFFERSIZE];
+  ssize_t     nread;
+  mode_t      mode = 0664;
   struct meta metadata;
 
   while (1) {
@@ -90,7 +90,12 @@ int main(void) {
       if (parsemeta(buffer, &metadata)) {
         fprintf(stderr, "cannot parse meta data\n");
         break;
-      }      
+      }
+      if (strchr(metadata.filename, '/') || strstr(metadata.filename, "..")) {
+        fprintf(stderr, "filename \"%s\" contains invalid characters\n", metadata.filename);
+        break;
+      }
+
       // add ./files as the path prefix
       snprintf(buffer, sizeof(buffer), "./files/%s", metadata.filename);
       filefd = open(buffer, O_WRONLY | O_CREAT | O_TRUNC, mode);
