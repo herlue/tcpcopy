@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
     }
 
     filename = path;
-    if (temp = strrchr(path, '/') && *(++temp))
+    if ((temp = strrchr(path, '/')) && *(++temp))
       filename = temp;
 
     filesize = attr.st_size;
